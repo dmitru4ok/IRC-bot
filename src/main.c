@@ -4,6 +4,7 @@ int clientfd = -1;
 
 void catch_signal() {
     printf("\nSocket %d closed\n", clientfd);
+    fflush(stdout);
     exit(close(clientfd));
 }
 
@@ -22,7 +23,7 @@ int main() {
         exit(1);
     }
 
-    char buffer[BUFF_SIZE];
+    char rec_buffer[IRC_MSG_BUFF_SIZE];
     struct sockaddr_in serv_addr;
     serv_addr.sin_family=AF_INET;
     serv_addr.sin_port=htons(conf.port);
@@ -35,18 +36,42 @@ int main() {
         perror("Connection failed");
         exit(1);
     }
-    char msg_nick[BUFF_SIZE]; 
-    char msg_user[BUFF_SIZE];
-    snprintf(msg_nick, BUFF_SIZE-2, "NICK %s\r\n", conf.nick);
-    snprintf(msg_user, BUFF_SIZE-2, "USER %s localhost * :%s\r\n", conf.user, conf.realname);
-    send(clientfd, msg_nick, strlen(msg_nick), 0);
-    send(clientfd, msg_user, strlen(msg_user), 0);
-    read(clientfd, buffer, BUFF_SIZE-1);
-    read(clientfd, buffer, BUFF_SIZE-1);
-    read(clientfd, buffer, BUFF_SIZE-1);
-    int valread = read(clientfd, buffer, BUFF_SIZE-1);
-    buffer[valread] = '\0';
-    printf("%s\n", buffer);
 
+    char* msg_reg = malloc(IRC_MSG_BUFF_SIZE);
+    snprintf(msg_reg, IRC_MSG_BUFF_SIZE, "NICK %s\r\n", conf.nick);
+    send(clientfd, msg_reg, strlen(msg_reg), 0);
+    snprintf(msg_reg, IRC_MSG_BUFF_SIZE, "USER %s localhost * :%s\r\n", conf.user, conf.realname);
+    send(clientfd, msg_reg, strlen(msg_reg), 0); // send NICK and USER messages, expect MOTD
+
+
+    int sock_rec_size;
+    ric_message parsed_msg;
+    while ((sock_rec_size = recv(clientfd, rec_buffer, IRC_MSG_BUFF_SIZE, 0)) > 0) {
+        rec_buffer[sock_rec_size] = '\0';
+        char* begin = rec_buffer;
+        char* end = strstr(rec_buffer, "\r\n");
+        while (end != NULL) { // untill full lines keep coming
+            printf("|||PARSING: %s\n", begin);
+            *end ='\0';
+            begin = end + 2;
+            // parse_message(motd_parse_ptr, &parsed_msg); // parse them
+            end = strstr(begin, "\r\n"); // get next one
+        }
+        
+        // if (strstr(rec_buffer, " 376 ") || strstr(rec_buffer, " 422 ")) {
+        //     break;
+        // }
+        
+    } // discard MOTD
+
+   
+    snprintf(msg_reg, IRC_MSG_BUFF_SIZE, "JOIN #Unix\r\n");
+    send(clientfd, msg_reg, strlen(msg_reg), 0);
+
+    int valread = read(clientfd, rec_buffer, IRC_MSG_BUFF_SIZE);
+    rec_buffer[valread] = '\0';
+    printf("%s\n", rec_buffer);
+
+    free(msg_reg);
     return close(clientfd);
 }

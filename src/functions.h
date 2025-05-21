@@ -9,7 +9,8 @@
 #include <string.h>
 #include <signal.h>
 
-#define BUFF_SIZE 512
+#define IRC_MSG_BUFF_SIZE 513 // 512 for protocol + 1 for \0
+#define MAX_PARAMS 15
 
 typedef struct {
     char server_ip[64];
@@ -21,5 +22,12 @@ typedef struct {
 
 } BotConfig;
 
+typedef struct {
+    char prefix[20];
+    char command[20];
+    char params[MAX_PARAMS][480];
+    int param_count;
+} ric_message;
+
 void load_config(const char* filename, BotConfig* config);
-void catch_sigint_signal();
+int parse_message(char* message, ric_message* out);

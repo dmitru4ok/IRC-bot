@@ -41,3 +41,44 @@ void load_config(const char* filename, BotConfig* config) {
 
     fclose(f);
 }
+
+
+// :CaveCPU6!~CaveCPU6@localhost PRIVMSG #Unix :Installing voidengine... [73%]
+// :CaveCPU5!~CaveCPU5@localhost PRIVMSG #Unix :Ancient symbols glow faintly on the walls.
+// :CaveCPU6!~CaveCPU6@localhost PRIVMSG #Unix :Installing voidengine... [83%]
+// :CaveCPU5!~CaveCPU5@localhost PRIVMSG #Unix :Echoes of old whispers reach your ears.
+// :CaveCPU6!~CaveCPU6@localhost PRIVMSG #Unix :Installing voidengine... [100%]
+// :CaveCPU5!~CaveCPU5@localhost PRIVMSG #Unix :You have found a hidden chamber!
+// :byudm1317!~byudm1317@task3-yudm1317.cloud PART #Unix :
+// PING :irc.cs.vu.lt
+// :irc.cs.vu.lt 372 byudm1317 :-  -----------------------------------------
+// :irc.cs.vu.lt 376 byudm1317 :End of MOTD command
+// 422 - no MOTD
+
+int parse_message(char *message, ric_message* out) {
+    if (!message) return -1;
+    int len = strlen(message);
+    if (len <= 0) return -1;
+
+    char copy_local[IRC_MSG_BUFF_SIZE];
+    strncpy(copy_local, message, IRC_MSG_BUFF_SIZE);
+    // printf("PARSING: %s\n", copy_local);
+
+    char* iter = copy_local;
+    if (copy_local[0] == ':') { // prefix present
+        iter = strchr(copy_local+1, ' ');
+        *iter = '\0';
+        strcpy(out->prefix, copy_local+1);
+        iter++;
+    } else {
+        out->prefix[0]='\0';
+    }
+
+    while (*iter == ' ') iter++;
+    char* term = strchr(iter, ' ');
+    *term = '\0';
+    strcpy(out->command, iter);
+    // printf("    prefix: => %s, command => %s\n", out->prefix, out->command);
+    return 0;
+
+}
