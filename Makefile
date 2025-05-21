@@ -4,7 +4,7 @@ OUT_DIR=bin
 all: bot
 
 bot: $(TARGET_FILES)
-	cc  $(TARGET_FILES) -o $(OUT_DIR)/bot
+	gcc -Wall -O3 $(TARGET_FILES) -o $(OUT_DIR)/bot
 
 clean:
 	rm -f $(OUT_DIR)/bot
