@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <string.h>
 #include <signal.h>
+#include <sys/wait.h>
 
 #define IRC_MSG_BUFF_SIZE 513 // 512 for protocol + 1 for \0
 #define MAX_PARAMS 15
@@ -34,4 +35,4 @@ typedef struct {
 
 void load_config(const char* filename, BotConfig* config);
 int parse_message(char* message, ric_message* out);
-int ignore_motd(int sockfd);
+int ignore_big_msg(int sockfd);

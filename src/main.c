@@ -1,23 +1,34 @@
 #include "functions.h"
 
 int clientfd = -1;
+int pipesfd[MAX_CHANNELS][2];
+int procids[MAX_CHANNELS] = { -1 };
+BotConfig conf;
 
 void catch_signal() {
     printf("\nSocket %d closed\n", clientfd);
     fflush(stdout);
+    for (int i = 0; i < conf.chan_num; ++i) {
+        close(pipesfd[i][0]);
+        close(pipesfd[i][1]);
+    }
     exit(close(clientfd));
 }
 
 int main() {
     signal(SIGINT, catch_signal);
     // read and process config file
-    BotConfig conf;
     load_config("bot.cfg", &conf);
+
     printf("Configured sucesfully: %s:%d, nickname: %s, realname - %s\nChannels: %d\n",conf.server_ip, conf.port, conf.nick, conf.realname, conf.chan_num);
     for (int i = 0; i < conf.chan_num; ++i) {
+        if (pipe(pipesfd[i]) == -1) {
+            printf("Opening a pipe failed\n");
+            return 1;
+        }
+        printf("pipe[%d][0] = %d, pipe[%d][1] = %d   ", i, pipesfd[i][0], i, pipesfd[i][1]);
         printf("%d => %s\n", i, conf.channels[i]);
     }
-
 
     clientfd = socket(AF_INET, SOCK_STREAM, 0);
     int status = 0;
@@ -45,19 +56,42 @@ int main() {
     send(clientfd, msg_reg, strlen(msg_reg), 0);
     snprintf(msg_reg, IRC_MSG_BUFF_SIZE, "USER %s localhost * :%s\r\n", conf.user, conf.realname);
     send(clientfd, msg_reg, strlen(msg_reg), 0); // send NICK and USER messages, expect MOTD
-    ignore_motd(clientfd);
+    ignore_big_msg(clientfd); // motd
 
-    snprintf(msg_reg, IRC_MSG_BUFF_SIZE, "JOIN #Unix\r\n");
-    send(clientfd, msg_reg, strlen(msg_reg), 0);
-    int valread = read(clientfd, msg_reg, IRC_MSG_BUFF_SIZE);
-    msg_reg[valread] = '\0';
-    printf("%s\n", msg_reg);
+    int childpid = 0, ch_no=0;
+    for (ch_no = 0; ch_no < conf.chan_num; ++ch_no) {
+        snprintf(msg_reg, IRC_MSG_BUFF_SIZE, "JOIN %s\r\n", conf.channels[ch_no]);
+        send(clientfd, msg_reg, strlen(msg_reg), 0);
+        ignore_big_msg(clientfd);
+        childpid = fork();
+        if (childpid == 0) {
+            break;
+        }
+    }
+
+    if (childpid == 0) {
+        printf("Child %d (%d) exiting\n", ch_no, getpid());
+        return 0;
+    } else {
+        int pid_died;
+        while((pid_died = wait(NULL)) != -1 || errno != ECHILD) {
+            printf("%d => waited for a child %d to die\n", getpid(), pid_died);
+        };
+        return 0;
+    }
+
+   
+    
+    
+    // int valread = read(clientfd, msg_reg, IRC_MSG_BUFF_SIZE);
+    // msg_reg[valread] = '\0';
+    // printf("%s\n", msg_reg);
     free(msg_reg);
 
     char rec_buffer[IRC_MSG_BUFF_SIZE];
     int sock_rec_size;
     // ric_message parsed_msg;
-    // int parentpid = getpid();
+    
     while ((sock_rec_size = recv(clientfd, rec_buffer, IRC_MSG_BUFF_SIZE, 0)) > 0) {
         printf("%s", rec_buffer);
     //     rec_buffer[sock_rec_size] = '\0';
@@ -77,9 +111,12 @@ int main() {
 
     // } // discard MOTD
     printf("Error happened!");
-   
 
-   
 
+    for (int i = 0; i < conf.chan_num; ++i) {
+        close(pipesfd[i][0]);
+        close(pipesfd[i][1]);
+    }
+   
     return close(clientfd);
 }

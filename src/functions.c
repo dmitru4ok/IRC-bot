@@ -82,10 +82,10 @@ int parse_message(char *message, ric_message* out) {
 
 }
 
-int ignore_motd(int sockfd) {
+int ignore_big_msg(int sockfd) {
     char waste[4096];
     int res = read(sockfd, waste, 4096);
-    printf("%s", waste);
+    // printf("%s", waste);
 
     return res;
 }
