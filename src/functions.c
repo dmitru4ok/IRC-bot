@@ -89,3 +89,50 @@ int ignore_big_msg(int sockfd) {
 
     return res;
 }
+
+int connect_to_server(BotConfig* conf) {
+    int clientfd = socket(AF_INET, SOCK_STREAM, 0);
+    int status = 0;
+
+    if (clientfd < -1) {
+        perror("Socket");
+        exit(1);
+    }
+
+    struct sockaddr_in serv_addr;
+    serv_addr.sin_family=AF_INET;
+    serv_addr.sin_port=htons(conf->port);
+    if(inet_pton(AF_INET, conf->server_ip, &serv_addr.sin_addr) < 0) {
+        perror("IP addr");
+        exit(1);
+    }
+
+    if ((status = connect(clientfd, (const struct sockaddr *)&serv_addr, sizeof(serv_addr))) < 0) {
+        perror("Connection failed");
+        exit(1);
+    }
+    return clientfd;
+}
+
+void listen_main() {
+    for (int i = 0; i < conf.chan_num; ++i) {
+        close(pipesfd[i][0]);
+        printf("MAIN: CHILD PID %d\n", child_pids[i]);
+        printf("Piping %s into process\n", conf.channels[i]);
+        write(pipesfd[i][1], conf.channels[i], strlen(conf.channels[i]) + 1);
+    }
+
+    int pid_died;
+
+    printf("\n\n\nMAIN: done sending, now waiting for child processes!\n\n\n");
+    while((pid_died = wait(NULL)) != -1 || errno != ECHILD) {
+        printf("MAIN(%d): waited for a child %d to die\n", getpid(), pid_died);
+    };
+
+    // close pipe writing channels
+    for (int i = 0; i < conf.chan_num; ++i) {
+        close(pipesfd[i][1]);
+    }
+    sem_destroy(sync_write);
+    munmap(sync_write, sizeof(sem_t));
+}

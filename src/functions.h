@@ -7,6 +7,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <signal.h>
 #include <sys/wait.h>
 #include <semaphore.h>
@@ -34,6 +35,14 @@ typedef struct {
     int param_count;
 } ric_message;
 
+extern int clientfd;
+extern int pipesfd[MAX_CHANNELS][2];
+extern pid_t child_pids[MAX_CHANNELS];
+extern BotConfig conf;
+extern sem_t* sync_write;
+
 void load_config(const char* filename, BotConfig* config);
 int parse_message(char* message, ric_message* out);
 int ignore_big_msg(int sockfd);
+int connect_to_server(BotConfig* conf);
+void listen_main();
