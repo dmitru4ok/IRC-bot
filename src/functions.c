@@ -35,25 +35,24 @@ void load_config(const char* filename, BotConfig* config) {
         } else if (strcmp(line_buff, "realname") == 0) {
             strncpy(config->realname, val, sizeof(config->realname)-1);
         } else if (strcmp(line_buff, "channels") == 0) {
-            strncpy(config->channels, val, sizeof(config->channels)-1);
+            config->chan_num = 0;
+            char *iter = strtok(val, ",");
+            while (iter != NULL) {
+                if (config->chan_num >= MAX_CHANNELS) {
+                    break;
+                }
+                int len = strlen(iter);
+                printf("%d => %s\n", len, iter);
+                strncpy(config->channels[config->chan_num], iter, CHANNEL_NAME_SIZE - 1);
+                config->channels[config->chan_num][len] = '\0';
+                config->chan_num++;
+                iter = strtok(NULL, ",");
+            }
         }
     }
 
     fclose(f);
 }
-
-
-// :CaveCPU6!~CaveCPU6@localhost PRIVMSG #Unix :Installing voidengine... [73%]
-// :CaveCPU5!~CaveCPU5@localhost PRIVMSG #Unix :Ancient symbols glow faintly on the walls.
-// :CaveCPU6!~CaveCPU6@localhost PRIVMSG #Unix :Installing voidengine... [83%]
-// :CaveCPU5!~CaveCPU5@localhost PRIVMSG #Unix :Echoes of old whispers reach your ears.
-// :CaveCPU6!~CaveCPU6@localhost PRIVMSG #Unix :Installing voidengine... [100%]
-// :CaveCPU5!~CaveCPU5@localhost PRIVMSG #Unix :You have found a hidden chamber!
-// :byudm1317!~byudm1317@task3-yudm1317.cloud PART #Unix :
-// PING :irc.cs.vu.lt
-// :irc.cs.vu.lt 372 byudm1317 :-  -----------------------------------------
-// :irc.cs.vu.lt 376 byudm1317 :End of MOTD command
-// 422 - no MOTD
 
 int parse_message(char *message, ric_message* out) {
     if (!message) return -1;
@@ -81,4 +80,12 @@ int parse_message(char *message, ric_message* out) {
     // printf("    prefix: => %s, command => %s\n", out->prefix, out->command);
     return 0;
 
+}
+
+int ignore_motd(int sockfd) {
+    char waste[4096];
+    int res = read(sockfd, waste, 4096);
+    printf("%s", waste);
+
+    return res;
 }

@@ -11,13 +11,16 @@
 
 #define IRC_MSG_BUFF_SIZE 513 // 512 for protocol + 1 for \0
 #define MAX_PARAMS 15
+#define MAX_CHANNELS 10
+#define CHANNEL_NAME_SIZE 201
 
 typedef struct {
     char server_ip[64];
     char nick[12];
     char user[12];
     char realname[64];
-    char channels[512];
+    char channels[MAX_CHANNELS][CHANNEL_NAME_SIZE];
+    int chan_num;
     int port;
 
 } BotConfig;
@@ -31,3 +34,4 @@ typedef struct {
 
 void load_config(const char* filename, BotConfig* config);
 int parse_message(char* message, ric_message* out);
+int ignore_motd(int sockfd);
