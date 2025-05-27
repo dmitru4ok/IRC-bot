@@ -136,3 +136,21 @@ void listen_main() {
     sem_destroy(sync_write);
     munmap(sync_write, sizeof(sem_t));
 }
+
+void listen_child(int channel_no) {
+    for (int i = 0; i < conf.chan_num; ++i) {
+        close(pipesfd[i][1]);
+        if (channel_no != i) {
+            close(pipesfd[i][0]);
+        }
+    }
+
+    char ch_name[CHANNEL_NAME_SIZE];
+    while (read(pipesfd[channel_no][0], ch_name, CHANNEL_NAME_SIZE) > 0) {
+        printf("I am child %d, my channel name is %s\n", channel_no, ch_name);
+    }
+   
+    close(pipesfd[channel_no][0]);
+    printf("Child %d (%d) exiting\n", channel_no, getpid());
+    munmap(sync_write, sizeof(sem_t));
+}

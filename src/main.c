@@ -5,8 +5,10 @@ int pipesfd[MAX_CHANNELS][2];
 pid_t child_pids[MAX_CHANNELS];
 BotConfig conf;
 sem_t* sync_write;
+pid_t parent;
 
-void cleanup() {
+void cleanup_main() {
+    // if (getpid() != parent) return;
     printf("%d is preforming a cleanup!\n", getpid());
     fflush(stdout);
     for (int i = 0; i < conf.chan_num; ++i) { //pipes
@@ -20,10 +22,10 @@ void cleanup() {
 }
 
 int main() {
-    signal(SIGINT, cleanup);
+    signal(SIGINT, cleanup_main);
     sync_write = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
     sem_init(sync_write, 1, 1);
-
+    parent = getpid();
     // read and process config file
     load_config("bot.cfg", &conf);
 
@@ -63,20 +65,7 @@ int main() {
 
     if (childpid == 0) {
         // CHILD WORKING PROCESSES
-        for (int i = 0; i < conf.chan_num; ++i) {
-            close(pipesfd[i][1]);
-            if (ch_no != i) {
-                close(pipesfd[i][0]);
-            }
-        }
-
-        char ch_name[CHANNEL_NAME_SIZE];
-        read(pipesfd[ch_no][0], ch_name, CHANNEL_NAME_SIZE);
-        printf("I am child %d, my channel name is %s\n", ch_no, ch_name);
-        close(pipesfd[ch_no][0]);
-        printf("Child %d (%d) exiting\n", ch_no, getpid());
-        munmap(sync_write, sizeof(sem_t));
-
+        listen_child(ch_no);
         return 0;
     } else { 
         // MAIN
@@ -84,14 +73,6 @@ int main() {
         return 0;
     }
 
-   
-    
-    
-    // int valread = read(clientfd, msg_reg, IRC_MSG_BUFF_SIZE);
-    // msg_reg[valread] = '\0';
-    // printf("%s\n", msg_reg);
-
-    
     printf("Error happened!");
     return close(clientfd);
 }

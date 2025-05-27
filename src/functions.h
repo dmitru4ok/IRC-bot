@@ -46,3 +46,4 @@ int parse_message(char* message, ric_message* out);
 int ignore_big_msg(int sockfd);
 int connect_to_server(BotConfig* conf);
 void listen_main();
+void listen_child(int);
