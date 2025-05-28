@@ -9,7 +9,7 @@ void load_config(const char* filename, BotConfig* config) {
 
     int max_buff = 200, read_len;
     char line_buff[max_buff];
-
+    
     while (fgets(line_buff, sizeof(line_buff), f)) {
         read_len = strlen(line_buff);
         if (read_len == 0 || line_buff[0] == '#' ) continue;
@@ -54,7 +54,7 @@ void load_config(const char* filename, BotConfig* config) {
     fclose(f);
 }
 
-int parse_message(char *message, ric_message* out) {
+int parse_message(char *message, irc_message* out) {
     if (!message) return -1;
     int len = strlen(message);
     if (len <= 0) return -1;
@@ -83,9 +83,11 @@ int parse_message(char *message, ric_message* out) {
 }
 
 int ignore_big_msg(int sockfd) {
-    char waste[4096];
-    int res = read(sockfd, waste, 4096);
-    // printf("%s", waste);
+    const int size = 8196;
+    char waste[size];
+    int res = recv(sockfd, waste, size, MSG_DONTWAIT);
+    waste[res] = '\0';
+    printf("%s", waste);
 
     return res;
 }
@@ -114,43 +116,61 @@ int connect_to_server(BotConfig* conf) {
     return clientfd;
 }
 
-void listen_main() {
-    for (int i = 0; i < conf.chan_num; ++i) {
-        close(pipesfd[i][0]);
-        printf("MAIN: CHILD PID %d\n", child_pids[i]);
-        printf("Piping %s into process\n", conf.channels[i]);
-        write(pipesfd[i][1], conf.channels[i], strlen(conf.channels[i]) + 1);
+void listen_main(int socket) {
+    char rec_buff[IRC_MSG_BUFF_SIZE * 2];
+    int i = 0, len_rec = 0;
+
+    while((len_rec = read(socket, rec_buff, IRC_MSG_BUFF_SIZE * 2)) > 0) {
+        rec_buff[len_rec] = 0;
+        printf("%s", rec_buff);
+        printf("Piping %s into process\n", conf.channels[i % conf.chan_num]);
+        write(main_to_children_pipes[i][1], conf.channels[i % conf.chan_num], strlen(conf.channels[i % conf.chan_num]) + 1);
+        ++i;
     }
 
     int pid_died;
-
     printf("\n\n\nMAIN: done sending, now waiting for child processes!\n\n\n");
     while((pid_died = wait(NULL)) != -1 || errno != ECHILD) {
         printf("MAIN(%d): waited for a child %d to die\n", getpid(), pid_died);
     };
+   
 
     // close pipe writing channels
     for (int i = 0; i < conf.chan_num; ++i) {
-        close(pipesfd[i][1]);
+        close(main_to_children_pipes[i][1]);
     }
-    sem_destroy(sync_write);
-    munmap(sync_write, sizeof(sem_t));
+    sem_destroy(sync_logging_sem);
+    munmap(sync_logging_sem, sizeof(sem_t));
 }
 
-void listen_child(int channel_no) {
+void listen_child(int socket, int channel_no) {
     for (int i = 0; i < conf.chan_num; ++i) {
-        close(pipesfd[i][1]);
+        close(main_to_children_pipes[i][1]);
         if (channel_no != i) {
-            close(pipesfd[i][0]);
+            close(main_to_children_pipes[i][0]);
         }
     }
 
     char ch_name[CHANNEL_NAME_SIZE];
-    while (read(pipesfd[channel_no][0], ch_name, CHANNEL_NAME_SIZE) > 0) {
+    char resp_buff[IRC_MSG_BUFF_SIZE];
+    while (read(main_to_children_pipes[channel_no][0], ch_name, CHANNEL_NAME_SIZE) > 0) {
+        snprintf(resp_buff, IRC_MSG_BUFF_SIZE, "PART %s\r\n", ch_name);
+        write(socket, resp_buff, strlen(resp_buff));
         printf("I am child %d, my channel name is %s\n", channel_no, ch_name);
     }
    
-    close(pipesfd[channel_no][0]);
+    close(main_to_children_pipes[channel_no][0]);
     printf("Child %d (%d) exiting\n", channel_no, getpid());
-    munmap(sync_write, sizeof(sem_t));
+    munmap(sync_logging_sem, sizeof(sem_t));
+}
+
+int server_reg(int socket, BotConfig *conf) { // send NICK and USER messages, expect MOTD
+    char msg_reg[IRC_MSG_BUFF_SIZE];
+    snprintf(msg_reg, IRC_MSG_BUFF_SIZE, "NICK %s\r\n", conf->nick);
+    // printf("%s", msg_reg);
+    send(socket, msg_reg, strlen(msg_reg), 0);
+    snprintf(msg_reg, IRC_MSG_BUFF_SIZE, "USER %s localhost * :%s\r\n", conf->user, conf->realname);
+    // printf("%s", msg_reg);
+    send(socket, msg_reg, strlen(msg_reg), 0);
+    return 0;
 }

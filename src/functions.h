@@ -31,19 +31,20 @@ typedef struct {
 typedef struct {
     char prefix[20];
     char command[20];
-    char params[MAX_PARAMS][480];
+    char params[MAX_PARAMS][200];
     int param_count;
-} ric_message;
+} irc_message;
 
-extern int clientfd;
-extern int pipesfd[MAX_CHANNELS][2];
+extern int main_to_children_pipes[MAX_CHANNELS][2];
+extern int children_to_main_pipes[MAX_CHANNELS][2];
 extern pid_t child_pids[MAX_CHANNELS];
 extern BotConfig conf;
-extern sem_t* sync_write;
+extern sem_t* sync_logging_sem;
 
 void load_config(const char* filename, BotConfig* config);
-int parse_message(char* message, ric_message* out);
+int parse_message(char* message, irc_message* out);
 int ignore_big_msg(int sockfd);
 int connect_to_server(BotConfig* conf);
-void listen_main();
-void listen_child(int);
+int server_reg(int,BotConfig*);
+void listen_main(int);
+void listen_child(int, int);
