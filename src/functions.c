@@ -57,14 +57,13 @@ void load_config(const char* filename, BotConfig* config) {
 int parse_message(char *message, irc_message* out) {
     if (!message) return -1;
     int len = strlen(message);
-    if (len <= 0) return -1;
+    if (len <= 0 || len > IRC_MSG_BUFF_SIZE) return -1;
 
     char copy_local[IRC_MSG_BUFF_SIZE];
     strncpy(copy_local, message, IRC_MSG_BUFF_SIZE);
-    // printf("PARSING: %s\n", copy_local);
 
     char* iter = copy_local;
-    if (copy_local[0] == ':') { // prefix present
+    if (copy_local[0] == ':') {
         iter = strchr(copy_local+1, ' ');
         *iter = '\0';
         strcpy(out->prefix, copy_local+1);
@@ -77,9 +76,27 @@ int parse_message(char *message, irc_message* out) {
     char* term = strchr(iter, ' ');
     *term = '\0';
     strcpy(out->command, iter);
-    // printf("    prefix: => %s, command => %s\n", out->prefix, out->command);
-    return 0;
+    while (*term == ' ' || *term == '\0') term++;
+    iter = term;
 
+    // params
+    out->param_count = 0;
+    while (*iter == ':' || (term = strchr(iter, ' '))) {
+        printf("Iteration: %d, left:|%s\n", out->param_count, iter);
+        if (*iter == ':') {
+            strncpy(out->params[out->param_count], iter+1 , 512);
+            out->param_count += 1;
+            break;
+        } else {
+            *term = '\0';
+            strncpy(out->params[out->param_count], iter , 200);
+        }
+
+        out->param_count += 1;
+        term += 1;
+        while (*term == ' ') ++term;
+        iter = term;
+    }
 }
 
 int ignore_big_msg(int sockfd) {
