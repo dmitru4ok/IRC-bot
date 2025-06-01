@@ -8,10 +8,15 @@ BotConfig conf;
 sem_t* sync_logging_sem;
 pid_t parent;
 
-
 void cleanup_main() {
     // only called by main, loop through child_pids to signal children to quit
-    printf("\n%d(main) is preforming a cleanup!\n", getpid());
+    printf("\n%d is preforming a cleanup!\n", getpid());
+    int pid_died;
+    while((pid_died = wait(NULL)) != -1 || errno != ECHILD) {
+        printf("MAIN(%d): waited for a child %d to die\n", getpid(), pid_died);
+    };
+    
+   
     fflush(stdout);
     for (int i = 0; i < conf.chan_num; ++i) { //pipes
         close(main_to_children_pipes[i][0]);
@@ -39,14 +44,14 @@ int main() {
             return 1;
         }
     }
-    
+
+    signal(SIGINT, cleanup_main);
 
     int ch_no = 0, childpid = 0;
     for (ch_no = 0; ch_no < conf.chan_num; ++ch_no) {
         childpid = fork();
         child_pids[ch_no] = childpid;
         if (childpid == 0) {
-            child_pids[ch_no] = 0;
             break;
         } else if (childpid == -1) {
             printf("Failed to create new proccess!\n");
@@ -56,86 +61,48 @@ int main() {
 
     if (childpid == 0) {
         // CHILD WORKING PROCESSES
-        // listen_child(socket, ch_no);
-        // irc_message rec_msg;
-        int size;
-        // char msg[IRC_MSG_BUFF_SIZE];
-        while(read(main_to_children_pipes[ch_no][0], &size, sizeof(int)) > 0) {
-            // snprintf(msg, IRC_MSG_BUFF_SIZE, "%s %s %s\r\n\0", rec_msg.command, rec_msg.params[0], rec_msg.params[1]);
-            printf("%d: Received from main: %d\n", getpid(), size);
-            fflush(stdout);
-            sleep(2);
 
-            int value = size + 1;
-            printf("%d: Sending back to main: %d\n", getpid(), value);
-            fflush(stdout);
-            write(children_to_main_pipes[ch_no][1], &value, sizeof(int));
+        for (int i = 0; i < conf.chan_num; ++i) {
+            close(main_to_children_pipes[i][1]);
+            close(children_to_main_pipes[i][0]);
+            if (ch_no != i) {
+                close(main_to_children_pipes[i][0]);
+                close(children_to_main_pipes[i][1]);
+            }
         }
+
+        listen_child(ch_no);
+
+        close(main_to_children_pipes[ch_no][0]);
+        close(children_to_main_pipes[ch_no][1]);
+        printf("Child %d (%d) exiting\n", ch_no, getpid());
+        munmap(sync_logging_sem, sizeof(sem_t));
         return 0;
     } else {
-        // MAIN
-        // signal(SIGINT, cleanup_main);
-       
         for (int i = 0; i < conf.chan_num; ++i) {
             close(main_to_children_pipes[i][0]);
             close(children_to_main_pipes[i][1]);
         }
-        //open socket
-        // int clientfd = connect_to_server(&conf);
-        //register
-        // server_reg(clientfd, &conf);
+
+        // open socket
+        int clientfd = connect_to_server(&conf);
+        // register
+        server_reg(clientfd, &conf);
         //join channels
-        // char join_msg[IRC_MSG_BUFF_SIZE] = "JOIN ";
-        // int offset = strlen(join_msg);
-        // for (int i = 0; i < conf.chan_num; ++i) {
-        //     int written = snprintf(join_msg + offset, IRC_MSG_BUFF_SIZE - offset, "%s%s", 
-        //         conf.channels[i], i < conf.chan_num - 1 ? "," : "\r\n");
-        //     if (written < 0 || written >= IRC_MSG_BUFF_SIZE - offset) {
-        //         fprintf(stderr, "Buffer overflow or error\n");
-        //         cleanup_main();
-        //     }
-        //     offset += written;
-        //     // printf("String after %d: %s\n", i, join_msg);
-        // }
-        // send(clientfd, join_msg, strlen(join_msg), 0);
-        // while ( ignore_big_msg(clientfd) > 0); // janky, will work for now
-        char* ch_name = "#Unix";
-        int i;
 
-        // irc_message msg;
-        char rec_buff[IRC_MSG_BUFF_SIZE];
-        int value = 0, res;
-        while (1 || recv(clientfd, rec_buff, IRC_MSG_BUFF_SIZE, 0) > 0) {
-            for (i=0; i < conf.chan_num; ++i) {
-                if (strcmp(ch_name, conf.channels[i])) break;
-            }
-
-            if (i == conf.chan_num) continue;
-            // strcpy(msg.command, "PRIVMSG");
-            // strcpy(msg.params[0], "#Unix");
-            // strcpy(msg.params[1], ":Hi from a bot!");
-            // msg.param_count = value;
-
-            printf("Write to child: %d\n", value);
-            fflush(stdout);
-            write(main_to_children_pipes[i][1], &value, sizeof(int));
-            read(children_to_main_pipes[i][0], &res, sizeof(int));
-            printf("Received from child: %d\n", res);
-            fflush(stdout);
-            ++value;
-        }
+        while ( ignore_big_msg(clientfd) > 0); // janky, will work for now
+        join_channels(clientfd);
+        listen_main(clientfd);
        
-
-        
-
-
-        
-
-
-        // listen_main();
+        for (int i = 0; i < conf.chan_num; ++i) {
+            close(main_to_children_pipes[i][1]);
+            close(children_to_main_pipes[i][0]);
+        }
+        munmap(sync_logging_sem, sizeof(sem_t));
         return 0;
     }
 
     printf("Error happened!");
+    cleanup_main();
     return close(clientfd);
 }

@@ -29,7 +29,7 @@ typedef struct {
 } BotConfig;
 
 typedef struct {
-    char prefix[20];
+    char prefix[200];
     char command[20];
     char params[MAX_PARAMS][200];
     int param_count;
@@ -47,4 +47,7 @@ int ignore_big_msg(int sockfd);
 int connect_to_server(BotConfig* conf);
 int server_reg(int,BotConfig*);
 void listen_main(int);
-void listen_child(int, int);
+void listen_child(int);
+void join_channels(int);
+void cleanup_main();
+int find_channel_index(BotConfig*,char*);

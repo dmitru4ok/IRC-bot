@@ -82,7 +82,7 @@ int parse_message(char *message, irc_message* out) {
     // params
     out->param_count = 0;
     while (*iter == ':' || (term = strchr(iter, ' '))) {
-        printf("Iteration: %d, left:|%s\n", out->param_count, iter);
+        // printf("Iteration: %d, left:|%s\n", out->param_count, iter);
         if (*iter == ':') {
             strncpy(out->params[out->param_count], iter+1 , 512);
             out->param_count += 1;
@@ -97,6 +97,13 @@ int parse_message(char *message, irc_message* out) {
         while (*term == ' ') ++term;
         iter = term;
     }
+
+    printf("----------\n%s|%s|%d\n", out->prefix, out->command, out->param_count);
+    for (int i =0; i < out->param_count; ++i) {
+        printf("param[%d]:|%s\n", i, out->params[i]);
+    }          
+    printf("----------\n");
+    return 0;
 }
 
 int ignore_big_msg(int sockfd) {
@@ -134,22 +141,42 @@ int connect_to_server(BotConfig* conf) {
 }
 
 void listen_main(int socket) {
-    char rec_buff[IRC_MSG_BUFF_SIZE * 2];
-    int i = 0, len_rec = 0;
+    char rec_buff[IRC_MSG_BUFF_SIZE * 8];
+    char resp_buff[IRC_MSG_BUFF_SIZE];
+    int len_rec = 0;
+    irc_message msg;
 
-    while((len_rec = read(socket, rec_buff, IRC_MSG_BUFF_SIZE * 2)) > 0) {
-        rec_buff[len_rec] = 0;
-        printf("%s", rec_buff);
-        printf("Piping %s into process\n", conf.channels[i % conf.chan_num]);
-        write(main_to_children_pipes[i][1], conf.channels[i % conf.chan_num], strlen(conf.channels[i % conf.chan_num]) + 1);
-        ++i;
+    while((len_rec = read(socket, rec_buff, IRC_MSG_BUFF_SIZE * 8)) > 0) {
+        char* tmp = rec_buff;
+        for (int j = 0; j < len_rec; ++j) {
+            if (rec_buff[j] == '\n' && j > 0 && rec_buff[j-1] == '\r') { // message present
+                rec_buff[j-1] = '\0';
+                printf("MESSAGE(%d): %s\n",  (int)strlen(tmp), tmp);
+
+                parse_message(tmp, &msg);
+                tmp = rec_buff+j+1;
+
+                if (strcmp(msg.command, "PING") == 0) {
+                    snprintf(resp_buff, IRC_MSG_BUFF_SIZE, "PONG %s\r\n", msg.params[0]);
+                    printf("response-pong: |%s\n", resp_buff);
+                    write(socket, resp_buff, 7 + strlen(msg.params[0]));
+                } else if (strcmp(msg.command, "PRIVMSG") == 0) {
+                    int channel_index, len;
+                    if (msg.param_count > 0 && ( channel_index = find_channel_index(&conf, msg.params[0])) > 0) {
+                        write(main_to_children_pipes[channel_index][1], &msg, sizeof(irc_message));
+                        read(children_to_main_pipes[channel_index][0], &len, sizeof(int));
+                        read(children_to_main_pipes[channel_index][0], &resp_buff, len);
+                        printf("\n\n\nFROM CHILD:%s\n\n", resp_buff);
+                    }
+                }
+            }
+        }
+
+        printf("\n\n\n\n\n\n\n END OF BUFFER\n");
+        // printf("%s", rec_buff);
+        // printf("Piping %s into process\n", conf.channels[i % conf.chan_num]);
+        // write(main_to_children_pipes[i][1], conf.channels[i % conf.chan_num], strlen(conf.channels[i % conf.chan_num]) + 1);
     }
-
-    int pid_died;
-    printf("\n\n\nMAIN: done sending, now waiting for child processes!\n\n\n");
-    while((pid_died = wait(NULL)) != -1 || errno != ECHILD) {
-        printf("MAIN(%d): waited for a child %d to die\n", getpid(), pid_died);
-    };
    
 
     // close pipe writing channels
@@ -160,25 +187,15 @@ void listen_main(int socket) {
     munmap(sync_logging_sem, sizeof(sem_t));
 }
 
-void listen_child(int socket, int channel_no) {
-    for (int i = 0; i < conf.chan_num; ++i) {
-        close(main_to_children_pipes[i][1]);
-        if (channel_no != i) {
-            close(main_to_children_pipes[i][0]);
-        }
+void listen_child(int channel_no) {
+    irc_message message;
+    char resp[IRC_MSG_BUFF_SIZE];
+    while ( read( main_to_children_pipes[channel_no][0], &message, sizeof(irc_message) ) > 0) {
+        printf("(%d): MESSAGE RECEIVED!\n", getpid());
+        int len = snprintf(resp, IRC_MSG_BUFF_SIZE, "PRIVMSG %s :Hi all!!! My childpid: %d\r\n", message.params[0], getpid());
+        write(children_to_main_pipes[channel_no][1], &len, sizeof(int));
+        write(children_to_main_pipes[channel_no][1], &resp, len);
     }
-
-    char ch_name[CHANNEL_NAME_SIZE];
-    char resp_buff[IRC_MSG_BUFF_SIZE];
-    while (read(main_to_children_pipes[channel_no][0], ch_name, CHANNEL_NAME_SIZE) > 0) {
-        snprintf(resp_buff, IRC_MSG_BUFF_SIZE, "PART %s\r\n", ch_name);
-        write(socket, resp_buff, strlen(resp_buff));
-        printf("I am child %d, my channel name is %s\n", channel_no, ch_name);
-    }
-   
-    close(main_to_children_pipes[channel_no][0]);
-    printf("Child %d (%d) exiting\n", channel_no, getpid());
-    munmap(sync_logging_sem, sizeof(sem_t));
 }
 
 int server_reg(int socket, BotConfig *conf) { // send NICK and USER messages, expect MOTD
@@ -190,4 +207,28 @@ int server_reg(int socket, BotConfig *conf) { // send NICK and USER messages, ex
     // printf("%s", msg_reg);
     send(socket, msg_reg, strlen(msg_reg), 0);
     return 0;
+}
+
+void join_channels(int sock) {
+    char join_msg[IRC_MSG_BUFF_SIZE] = "JOIN ";
+    int offset = strlen(join_msg);
+    for (int i = 0; i < conf.chan_num; ++i) {
+        int written = snprintf(join_msg + offset, IRC_MSG_BUFF_SIZE - offset, "%s%s", 
+            conf.channels[i], i < conf.chan_num - 1 ? "," : "\r\n");
+        if (written < 0 || written >= IRC_MSG_BUFF_SIZE - offset) {
+            fprintf(stderr, "Buffer overflow or error\n");
+            cleanup_main();
+        }
+        offset += written;
+    }
+    send(sock, join_msg, strlen(join_msg), 0);
+}
+
+int find_channel_index(BotConfig* conf,char* ch_name) {
+    for (int ind = 0; ind < conf->chan_num; ++ind) {
+        if (strcmp(conf->channels[ind], ch_name)) {
+            return ind;
+        }
+    }
+    return -1;
 }
