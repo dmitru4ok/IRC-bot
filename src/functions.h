@@ -28,6 +28,7 @@ typedef struct {
     char channels[MAX_CHANNELS][CHANNEL_NAME_SIZE];
     int chan_num;
     int port;
+    int logs;
 
 } BotConfig;
 

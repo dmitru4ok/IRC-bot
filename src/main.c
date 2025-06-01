@@ -10,12 +10,12 @@ pid_t parent;
 
 void cleanup_main() {
     // only called by main, loop through child_pids to signal children to quit
-    if (parent == getpid()) write_log(conf.logfile, "performing a cleanup");
+    if (parent == getpid()) write_log(conf.logfile, "performing a cleanup\n");
 
     int pid_died;
     while((pid_died = wait(NULL)) != -1 || errno != ECHILD) {
         char msg[128];
-        snprintf(msg, sizeof(msg), "MAIN: waited for child (%d) to terminate", pid_died);
+        snprintf(msg, sizeof(msg), "MAIN: waited for child (%d) to terminate\n", pid_died);
         write_log(conf.logfile, msg);
     };
     
@@ -41,11 +41,11 @@ int main() {
     init_log(conf.logfile);
 
     char log_buff[256];
-    snprintf(log_buff, 256, "Configured sucesfully: %s:%d, nickname: %s, realname - %s, %d channels",conf.server_ip, conf.port, conf.nick, conf.realname, conf.chan_num);
+    snprintf(log_buff, 256, "Configured sucesfully: %s:%d, nickname: %s, realname - %s, %d channels\n",conf.server_ip, conf.port, conf.nick, conf.realname, conf.chan_num);
     write_log(conf.logfile, log_buff);
     for (int i = 0; i < conf.chan_num; ++i) {
         if (pipe(main_to_children_pipes[i]) == -1 || pipe(children_to_main_pipes[i]) == -1) {
-            write_log(conf.logfile, "Opening a pipe failed");
+            write_log(conf.logfile, "Opening a pipe failed\n");
             return 1;
         }
     }
@@ -57,10 +57,10 @@ int main() {
         childpid = fork();
         child_pids[ch_no] = childpid;
         if (childpid == 0) {
-            write_log(conf.logfile, "New process created!");
+            write_log(conf.logfile, "New process created!\n");
             break;
         } else if (childpid == -1) {
-            write_log(conf.logfile, "Failed to create a new proccess!");
+            write_log(conf.logfile, "Failed to create a new proccess!\n");
             cleanup_main();
         }
     }

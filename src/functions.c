@@ -35,7 +35,9 @@ void load_config(const char* filename, BotConfig* config) {
         } else if (strcmp(line_buff, "realname") == 0) {
             strncpy(config->realname, val, sizeof(config->realname)-1);
         } else if (strcmp(line_buff, "logfile") == 0) {
-            strncpy(config->logfile, val, sizeof(config->realname)-1); 
+            strncpy(config->logfile, val, sizeof(config->realname)-1);
+        } else if (strcmp(line_buff, "enable_logs") == 0) {
+            config->logs = atoi(val);
         } else if (strcmp(line_buff, "channels") == 0) {
             config->chan_num = 0;
             char *iter = strtok(val, ",");
@@ -44,7 +46,6 @@ void load_config(const char* filename, BotConfig* config) {
                     break;
                 }
                 int len = strlen(iter);
-                printf("%d => %s\n", len, iter);
                 strncpy(config->channels[config->chan_num], iter, CHANNEL_NAME_SIZE - 1);
                 config->channels[config->chan_num][len] = '\0';
                 config->chan_num++;
@@ -84,7 +85,6 @@ int parse_message(char *message, irc_message* out) {
     // params
     out->param_count = 0;
     while (*iter == ':' || (term = strchr(iter, ' '))) {
-        // printf("Iteration: %d, left:|%s\n", out->param_count, iter);
         if (*iter == ':') {
             strncpy(out->params[out->param_count], iter+1 , 512);
             out->param_count += 1;
@@ -100,11 +100,15 @@ int parse_message(char *message, irc_message* out) {
         iter = term;
     }
 
-    printf("----------\n%s|%s|%d\n", out->prefix, out->command, out->param_count);
-    for (int i =0; i < out->param_count; ++i) {
-        printf("param[%d]:|%s\n", i, out->params[i]);
-    }          
-    printf("----------\n");
+    char log_buff[IRC_MSG_BUFF_SIZE];
+    write_log(conf.logfile, "---------\n");
+    snprintf(log_buff, IRC_MSG_BUFF_SIZE, "%s|%s|%d\n", out->prefix, out->command, out->param_count);
+    write_log(conf.logfile, log_buff);
+    for (int i = 0; i < out->param_count; ++i) {
+        snprintf(log_buff, IRC_MSG_BUFF_SIZE, "param[%d]:|%s\n", i, out->params[i]);
+        write_log(conf.logfile, log_buff);
+    }
+    write_log(conf.logfile, "---------\n");
     return 0;
 }
 
@@ -123,7 +127,7 @@ int connect_to_server(BotConfig* conf) {
     int status = 0;
 
     if (clientfd < -1) {
-        write_log(conf->logfile, "Couldn't open socket!");
+        write_log(conf->logfile, "Couldn't open socket!\n");
         cleanup_main();
     }
     
@@ -132,17 +136,17 @@ int connect_to_server(BotConfig* conf) {
     serv_addr.sin_family=AF_INET;
     serv_addr.sin_port=htons(conf->port);
     if(inet_pton(AF_INET, conf->server_ip, &serv_addr.sin_addr) < 0) {
-        write_log(conf->logfile, "Couldn't convert IP!");
+        write_log(conf->logfile, "Couldn't convert IP!\n");
         cleanup_main();
     }
 
     if ((status = connect(clientfd, (const struct sockaddr *)&serv_addr, sizeof(serv_addr))) < 0) {
-        write_log(conf->logfile, "Connection failed!");
+        write_log(conf->logfile, "Connection failed!\n");
         cleanup_main();
     }
 
     char success_buff[128];
-    snprintf(success_buff, 128, "Connected on socket fd(%d)", clientfd);
+    snprintf(success_buff, 128, "Connected on socket fd(%d)\n", clientfd);
     write_log(conf->logfile, success_buff);
     return clientfd;
 }
@@ -150,6 +154,7 @@ int connect_to_server(BotConfig* conf) {
 void listen_main(int socket) {
     char rec_buff[IRC_MSG_BUFF_SIZE * 8];
     char resp_buff[IRC_MSG_BUFF_SIZE];
+    char log_buff[IRC_MSG_BUFF_SIZE * 2];
     int len_rec = 0;
     irc_message msg;
 
@@ -158,14 +163,13 @@ void listen_main(int socket) {
         for (int j = 0; j < len_rec; ++j) {
             if (rec_buff[j] == '\n' && j > 0 && rec_buff[j-1] == '\r') { // message present
                 rec_buff[j-1] = '\0';
-                printf("MESSAGE(%d): %s\n",  (int)strlen(tmp), tmp);
-
+                snprintf(log_buff, IRC_MSG_BUFF_SIZE * 2, "MESSAGE(%d): %s\n",  (int)strlen(tmp), tmp);
+                write_log(conf.logfile, log_buff);
                 parse_message(tmp, &msg);
                 tmp = rec_buff+j+1;
 
                 if (strcmp(msg.command, "PING") == 0) {
                     snprintf(resp_buff, IRC_MSG_BUFF_SIZE, "PONG %s\r\n", msg.params[0]);
-                    printf("response-pong: |%s\n", resp_buff);
                     write(socket, resp_buff, 7 + strlen(msg.params[0]));
                 } else if (strcmp(msg.command, "PRIVMSG") == 0) {
                     int channel_index, len;
@@ -173,16 +177,11 @@ void listen_main(int socket) {
                         write(main_to_children_pipes[channel_index][1], &msg, sizeof(irc_message));
                         read(children_to_main_pipes[channel_index][0], &len, sizeof(int));
                         read(children_to_main_pipes[channel_index][0], &resp_buff, len);
-                        printf("\n\n\nFROM CHILD:%s\n\n", resp_buff);
+                        printf("\n\n\nFROM CHILD: |%s\n\n", resp_buff);
                     }
                 }
             }
         }
-
-        printf("\n\n\n\n\n\n\n END OF BUFFER\n");
-        // printf("%s", rec_buff);
-        // printf("Piping %s into process\n", conf.channels[i % conf.chan_num]);
-        // write(main_to_children_pipes[i][1], conf.channels[i % conf.chan_num], strlen(conf.channels[i % conf.chan_num]) + 1);
     }
    
 
@@ -198,9 +197,10 @@ void listen_child(int channel_no) {
     irc_message message;
     char resp[IRC_MSG_BUFF_SIZE];
     while ( read( main_to_children_pipes[channel_no][0], &message, sizeof(irc_message) ) > 0) {
-        printf("(%d): MESSAGE RECEIVED!\n", getpid());
+        write_log(conf.logfile, "MESSAGE RECEIVED!\n");
         int len = snprintf(resp, IRC_MSG_BUFF_SIZE, "PRIVMSG %s :Hi all!!! My childpid: %d\r\n", message.params[0], getpid());
         write(children_to_main_pipes[channel_no][1], &len, sizeof(int));
+        write_log(conf.logfile, resp);
         write(children_to_main_pipes[channel_no][1], &resp, len);
     }
 }
@@ -235,7 +235,7 @@ void join_channels(int sock) {
 
 int find_channel_index(BotConfig* conf,char* ch_name) {
     for (int ind = 0; ind < conf->chan_num; ++ind) {
-        if (strcmp(conf->channels[ind], ch_name)) {
+        if (strcmp(conf->channels[ind], ch_name) == 0) {
             return ind;
         }
     }
@@ -243,6 +243,7 @@ int find_channel_index(BotConfig* conf,char* ch_name) {
 }
 
 void init_log(char* logfile) {
+    if (!conf.logs) return;
     FILE *f = fopen(conf.logfile, "w");
     if (f == NULL) {
         printf("Failed to owverwrite log file!\n");
@@ -252,6 +253,7 @@ void init_log(char* logfile) {
 }
 
 int write_log(char* logfile,char* msg) {
+    if (!conf.logs) return 0;
 
     sem_wait(sync_logging_sem);
     FILE* f = fopen(logfile, "a");
@@ -267,7 +269,7 @@ int write_log(char* logfile,char* msg) {
     time(&rawtime);
     timeinfo = localtime(&rawtime);
     strftime(time_buff, sizeof(time_buff), "%Y-%m-%d %H:%M:%S", timeinfo);
-    fprintf(f, "%s - [%s] [%d] %s\n", getpid()  == parent ? "MAIN " : "CHILD", time_buff, getpid(), msg);
+    fprintf(f, "%s - [%s] [%d] %s", getpid()  == parent ? "MAIN " : "CHILD", time_buff, getpid(), msg);
     fclose(f);
 
     sem_post(sync_logging_sem);
