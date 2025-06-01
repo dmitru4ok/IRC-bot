@@ -13,6 +13,7 @@
 #include <semaphore.h>
 #include <linux/limits.h>
 #include <time.h>
+#include <regex.h>
 
 #define IRC_MSG_BUFF_SIZE 513 // 512 for protocol + 1 for \0
 #define MAX_PARAMS 15
@@ -58,3 +59,4 @@ void cleanup_main();
 int find_channel_index(BotConfig*,char*);
 int write_log(char*,char*);
 void init_log(char*);
+int parse_user_from_prefix(char*, char*);

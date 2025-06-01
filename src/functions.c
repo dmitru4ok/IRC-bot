@@ -155,8 +155,14 @@ void listen_main(int socket) {
     char rec_buff[IRC_MSG_BUFF_SIZE * 8];
     char resp_buff[IRC_MSG_BUFF_SIZE];
     char log_buff[IRC_MSG_BUFF_SIZE * 2];
-    int len_rec = 0;
+    int len_rec = 0, regex_init = 1;
     irc_message msg;
+    regex_t regex;
+    const char *pattern = "^b[A-Za-z]{4}[0-9]{4}$";
+    if (regcomp(&regex, pattern, REG_EXTENDED) != 0) {
+        write_log(conf.logfile, "Could not compile regex!");
+        regex_init = 0;
+    }
 
     while((len_rec = read(socket, rec_buff, IRC_MSG_BUFF_SIZE * 8)) > 0) {
         char* tmp = rec_buff;
@@ -173,11 +179,18 @@ void listen_main(int socket) {
                     write(socket, resp_buff, 7 + strlen(msg.params[0]));
                 } else if (strcmp(msg.command, "PRIVMSG") == 0) {
                     int channel_index, len;
-                    if (msg.param_count > 0 && ( channel_index = find_channel_index(&conf, msg.params[0])) >= 0) {
+                    char sender[200];
+                    parse_user_from_prefix(msg.prefix, sender);
+                    printf("%s\n", sender);
+                    if (
+                        msg.param_count > 0 && 
+                        regex_init &&
+                        regexec(&regex, sender, 0, NULL, 0) != 0 &&    
+                        ( channel_index = find_channel_index(&conf, msg.params[0])) >= 0
+                    ) {
                         write(main_to_children_pipes[channel_index][1], &msg, sizeof(irc_message));
                         read(children_to_main_pipes[channel_index][0], &len, sizeof(int));
                         read(children_to_main_pipes[channel_index][0], &resp_buff, len);
-                        printf("\n\n\nFROM CHILD: |%s\n\n", resp_buff);
                     }
                 }
             }
@@ -196,9 +209,11 @@ void listen_main(int socket) {
 void listen_child(int channel_no) {
     irc_message message;
     char resp[IRC_MSG_BUFF_SIZE];
+    char sender[200];
     while ( read( main_to_children_pipes[channel_no][0], &message, sizeof(irc_message) ) > 0) {
         write_log(conf.logfile, "MESSAGE RECEIVED!\n");
-        int len = snprintf(resp, IRC_MSG_BUFF_SIZE, "PRIVMSG %s :Hi all!!! My childpid: %d\r\n", message.params[0], getpid());
+        parse_user_from_prefix(message.prefix, sender);
+        int len = snprintf(resp, IRC_MSG_BUFF_SIZE, "PRIVMSG %s :Hi %s!!! My topic: %s\r\n", message.params[0], sender, conf.channels[channel_no]);
         write(children_to_main_pipes[channel_no][1], &len, sizeof(int));
         write_log(conf.logfile, resp);
         write(children_to_main_pipes[channel_no][1], &resp, len);
@@ -275,4 +290,17 @@ int write_log(char* logfile,char* msg) {
     sem_post(sync_logging_sem);
     return 0;
 
+}
+
+int parse_user_from_prefix(char* prefix, char* out) {
+    char copy[200];
+    snprintf(copy, sizeof(copy), "%s", prefix);
+    char* exclamation = strchr(copy, '!');
+    char* server_del = strchr(copy, '@');
+    if (!exclamation || !server_del) {
+        return -1;
+    }
+    *server_del = '\0';
+    strcpy(out, exclamation+2);
+    return 0;
 }

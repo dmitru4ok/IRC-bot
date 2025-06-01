@@ -98,7 +98,6 @@ int main() {
         while ( ignore_big_msg(clientfd) > 0); // janky, will work for now
         //join channels
         join_channels(clientfd);
-
         // listen
         listen_main(clientfd);
        
