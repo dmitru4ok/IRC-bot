@@ -173,7 +173,7 @@ void listen_main(int socket) {
                     write(socket, resp_buff, 7 + strlen(msg.params[0]));
                 } else if (strcmp(msg.command, "PRIVMSG") == 0) {
                     int channel_index, len;
-                    if (msg.param_count > 0 && ( channel_index = find_channel_index(&conf, msg.params[0])) > 0) {
+                    if (msg.param_count > 0 && ( channel_index = find_channel_index(&conf, msg.params[0])) >= 0) {
                         write(main_to_children_pipes[channel_index][1], &msg, sizeof(irc_message));
                         read(children_to_main_pipes[channel_index][0], &len, sizeof(int));
                         read(children_to_main_pipes[channel_index][0], &resp_buff, len);
