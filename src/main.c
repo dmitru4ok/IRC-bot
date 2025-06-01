@@ -10,14 +10,16 @@ pid_t parent;
 
 void cleanup_main() {
     // only called by main, loop through child_pids to signal children to quit
-    printf("\n%d is preforming a cleanup!\n", getpid());
+    if (parent == getpid()) write_log(conf.logfile, "performing a cleanup");
+
     int pid_died;
     while((pid_died = wait(NULL)) != -1 || errno != ECHILD) {
-        printf("MAIN(%d): waited for a child %d to die\n", getpid(), pid_died);
+        char msg[128];
+        snprintf(msg, sizeof(msg), "MAIN: waited for child (%d) to terminate", pid_died);
+        write_log(conf.logfile, msg);
     };
     
    
-    fflush(stdout);
     for (int i = 0; i < conf.chan_num; ++i) { //pipes
         close(main_to_children_pipes[i][0]);
         close(main_to_children_pipes[i][1]);
@@ -36,11 +38,14 @@ int main() {
     parent = getpid();
     // read and process config file
     load_config("bot.cfg", &conf);
+    init_log(conf.logfile);
 
-    printf("Configured sucesfully: %s:%d, nickname: %s, realname - %s\nChannels: %d\n",conf.server_ip, conf.port, conf.nick, conf.realname, conf.chan_num);
+    char log_buff[256];
+    snprintf(log_buff, 256, "Configured sucesfully: %s:%d, nickname: %s, realname - %s, %d channels",conf.server_ip, conf.port, conf.nick, conf.realname, conf.chan_num);
+    write_log(conf.logfile, log_buff);
     for (int i = 0; i < conf.chan_num; ++i) {
         if (pipe(main_to_children_pipes[i]) == -1 || pipe(children_to_main_pipes[i]) == -1) {
-            fprintf(stderr, "Opening a pipe failed\n");
+            write_log(conf.logfile, "Opening a pipe failed");
             return 1;
         }
     }
@@ -52,16 +57,16 @@ int main() {
         childpid = fork();
         child_pids[ch_no] = childpid;
         if (childpid == 0) {
+            write_log(conf.logfile, "New process created!");
             break;
         } else if (childpid == -1) {
-            printf("Failed to create new proccess!\n");
-            return 1;
+            write_log(conf.logfile, "Failed to create a new proccess!");
+            cleanup_main();
         }
     }
 
     if (childpid == 0) {
         // CHILD WORKING PROCESSES
-
         for (int i = 0; i < conf.chan_num; ++i) {
             close(main_to_children_pipes[i][1]);
             close(children_to_main_pipes[i][0]);
@@ -88,10 +93,13 @@ int main() {
         int clientfd = connect_to_server(&conf);
         // register
         server_reg(clientfd, &conf);
-        //join channels
 
+        // skip motd
         while ( ignore_big_msg(clientfd) > 0); // janky, will work for now
+        //join channels
         join_channels(clientfd);
+
+        // listen
         listen_main(clientfd);
        
         for (int i = 0; i < conf.chan_num; ++i) {
@@ -99,6 +107,7 @@ int main() {
             close(children_to_main_pipes[i][0]);
         }
         munmap(sync_logging_sem, sizeof(sem_t));
+        close(clientfd);
         return 0;
     }
 

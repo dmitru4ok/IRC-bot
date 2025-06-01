@@ -34,6 +34,8 @@ void load_config(const char* filename, BotConfig* config) {
             strncpy(config->user, val, sizeof(config->user)-1);
         } else if (strcmp(line_buff, "realname") == 0) {
             strncpy(config->realname, val, sizeof(config->realname)-1);
+        } else if (strcmp(line_buff, "logfile") == 0) {
+            strncpy(config->logfile, val, sizeof(config->realname)-1); 
         } else if (strcmp(line_buff, "channels") == 0) {
             config->chan_num = 0;
             char *iter = strtok(val, ",");
@@ -121,22 +123,27 @@ int connect_to_server(BotConfig* conf) {
     int status = 0;
 
     if (clientfd < -1) {
-        perror("Socket");
-        exit(1);
+        write_log(conf->logfile, "Couldn't open socket!");
+        cleanup_main();
     }
+    
 
     struct sockaddr_in serv_addr;
     serv_addr.sin_family=AF_INET;
     serv_addr.sin_port=htons(conf->port);
     if(inet_pton(AF_INET, conf->server_ip, &serv_addr.sin_addr) < 0) {
-        perror("IP addr");
-        exit(1);
+        write_log(conf->logfile, "Couldn't convert IP!");
+        cleanup_main();
     }
 
     if ((status = connect(clientfd, (const struct sockaddr *)&serv_addr, sizeof(serv_addr))) < 0) {
-        perror("Connection failed");
-        exit(1);
+        write_log(conf->logfile, "Connection failed!");
+        cleanup_main();
     }
+
+    char success_buff[128];
+    snprintf(success_buff, 128, "Connected on socket fd(%d)", clientfd);
+    write_log(conf->logfile, success_buff);
     return clientfd;
 }
 
@@ -201,11 +208,12 @@ void listen_child(int channel_no) {
 int server_reg(int socket, BotConfig *conf) { // send NICK and USER messages, expect MOTD
     char msg_reg[IRC_MSG_BUFF_SIZE];
     snprintf(msg_reg, IRC_MSG_BUFF_SIZE, "NICK %s\r\n", conf->nick);
-    // printf("%s", msg_reg);
+  
     send(socket, msg_reg, strlen(msg_reg), 0);
+    write_log(conf->logfile, msg_reg);
     snprintf(msg_reg, IRC_MSG_BUFF_SIZE, "USER %s localhost * :%s\r\n", conf->user, conf->realname);
-    // printf("%s", msg_reg);
     send(socket, msg_reg, strlen(msg_reg), 0);
+    write_log(conf->logfile, msg_reg);
     return 0;
 }
 
@@ -222,6 +230,7 @@ void join_channels(int sock) {
         offset += written;
     }
     send(sock, join_msg, strlen(join_msg), 0);
+    write_log(conf.logfile, join_msg);
 }
 
 int find_channel_index(BotConfig* conf,char* ch_name) {
@@ -231,4 +240,37 @@ int find_channel_index(BotConfig* conf,char* ch_name) {
         }
     }
     return -1;
+}
+
+void init_log(char* logfile) {
+    FILE *f = fopen(conf.logfile, "w");
+    if (f == NULL) {
+        printf("Failed to owverwrite log file!\n");
+        exit(1);
+    }
+    fclose(f);
+}
+
+int write_log(char* logfile,char* msg) {
+
+    sem_wait(sync_logging_sem);
+    FILE* f = fopen(logfile, "a");
+    if (!f) {
+        printf("Could not open the log file %s!\n", logfile);
+        sem_post(sync_logging_sem);
+        exit(1);
+    }
+
+    time_t rawtime;
+    struct tm *timeinfo;
+    char time_buff[64];
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
+    strftime(time_buff, sizeof(time_buff), "%Y-%m-%d %H:%M:%S", timeinfo);
+    fprintf(f, "%s - [%s] [%d] %s\n", getpid()  == parent ? "MAIN " : "CHILD", time_buff, getpid(), msg);
+    fclose(f);
+
+    sem_post(sync_logging_sem);
+    return 0;
+
 }

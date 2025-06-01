@@ -1,3 +1,4 @@
 bin/
 .vscode/
 model_boot.sh
+*.log

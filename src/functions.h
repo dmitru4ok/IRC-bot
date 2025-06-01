@@ -11,6 +11,8 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <semaphore.h>
+#include <linux/limits.h>
+#include <time.h>
 
 #define IRC_MSG_BUFF_SIZE 513 // 512 for protocol + 1 for \0
 #define MAX_PARAMS 15
@@ -22,6 +24,7 @@ typedef struct {
     char nick[12];
     char user[12];
     char realname[64];
+    char logfile[PATH_MAX];
     char channels[MAX_CHANNELS][CHANNEL_NAME_SIZE];
     int chan_num;
     int port;
@@ -40,6 +43,7 @@ extern int children_to_main_pipes[MAX_CHANNELS][2];
 extern pid_t child_pids[MAX_CHANNELS];
 extern BotConfig conf;
 extern sem_t* sync_logging_sem;
+extern pid_t parent;
 
 void load_config(const char* filename, BotConfig* config);
 int parse_message(char* message, irc_message* out);
@@ -51,3 +55,5 @@ void listen_child(int);
 void join_channels(int);
 void cleanup_main();
 int find_channel_index(BotConfig*,char*);
+int write_log(char*,char*);
+void init_log(char*);
