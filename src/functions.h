@@ -14,6 +14,7 @@
 #include <linux/limits.h>
 #include <time.h>
 #include <regex.h>
+#include <curl/curl.h>
 
 #define IRC_MSG_BUFF_SIZE 513 // 512 for protocol + 1 for \0
 #define MAX_PARAMS 15

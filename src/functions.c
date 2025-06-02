@@ -214,7 +214,7 @@ void listen_child(int channel_no) {
     while ( read( main_to_children_pipes[channel_no][0], &message, sizeof(irc_message) ) > 0) {
         write_log(conf->logfile, "MESSAGE RECEIVED!\n");
         parse_user_from_prefix(message.prefix, sender);
-        int len = snprintf(resp, IRC_MSG_BUFF_SIZE, "PRIVMSG %s :Hi, %s!!! My topic on this chanel: %s\r\n", message.params[0], sender, conf->narratives[channel_no]);
+        int len = snprintf(resp, IRC_MSG_BUFF_SIZE, "PRIVMSG %s :Hi, %s!!! PROMPT: Answer if question: %s OR Talk about %s. No more than 20 words!\r\n", message.params[0], sender, message.params[1], conf->narratives[channel_no]);
         write(children_to_main_pipes[channel_no][1], &len, sizeof(int));
         write_log(conf->logfile, resp);
         write(children_to_main_pipes[channel_no][1], &resp, len);
@@ -320,18 +320,18 @@ void handle_admin_commands(int socket, irc_message* msg) {
     char* quit = "quit";
     char* switch_ = "switch";
     if (strncmp(msg->params[1], quit,  strlen(quit)) == 0) {
-        char* msg = "QUIT :I must obey\r\n";
+        char* msg = "QUIT :My master needs me somewhere else!\r\n";
         write(socket, msg, strlen(msg));
     } else if (strncmp(msg->params[1], switch_, strlen(switch_)) == 0) {
         // switch <channel> <new narrative text>
-        char copy[300], channel[CHANNEL_NAME_SIZE], new_narrative[30];
+        char copy[IRC_MSG_BUFF_SIZE], channel[CHANNEL_NAME_SIZE], new_narrative[30];
         strncpy(copy, msg->params[1], 300);
         char* space = strchr(copy, ' ');
         space++;
         char* iter = space;
         space = strchr(iter, ' ');   
         *space = '\0';
-        strncpy(channel, iter, sizeof(channel));
+        strncpy(channel, iter, sizeof(channel)-1);
         space++;
         iter = space;
         int i = 0;
@@ -341,8 +341,8 @@ void handle_admin_commands(int socket, irc_message* msg) {
                 break;
             }
         }
-
-        printf("change of narrative: %s -> %s\n", conf->channels[i], conf->narratives[i]);
+        int len = snprintf(copy, IRC_MSG_BUFF_SIZE, "PRIVMSG %s :changed narrative of %s to %s\r\n", conf->admin_channel, conf->channels[i], conf->narratives[i]);
+        write(socket, copy, len);
     }
 }
 
