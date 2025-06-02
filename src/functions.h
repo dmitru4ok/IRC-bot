@@ -29,7 +29,7 @@ typedef struct {
     char admin_pass[20];
     char logfile[PATH_MAX];
     char channels[MAX_CHANNELS][CHANNEL_NAME_SIZE];
-    char narratives[MAX_CHANNELS][20];
+    char narratives[MAX_CHANNELS][30];
     int chan_num;
     int port;
     int logs;
@@ -64,3 +64,4 @@ int write_log(char*,char*);
 void init_log(char*);
 int parse_user_from_prefix(char*, char*);
 void handle_admin_commands(int, irc_message*);
+void parse_narratives(char*);

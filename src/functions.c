@@ -42,6 +42,8 @@ void load_config(const char* filename) {
             strncpy(conf->admin_channel, val, sizeof(conf->admin_channel) - 1);
         } else if (strcmp(line_buff, "admin_channel_pass") == 0) {
             strncpy(conf->admin_pass, val, sizeof(conf->admin_pass) - 1);
+        } else if (strcmp(line_buff, "narratives") == 0) {
+            parse_narratives(val);
         } else if (strcmp(line_buff, "channels") == 0) {
             conf->chan_num = 0;
             char *iter = strtok(val, ",");
@@ -319,5 +321,21 @@ void handle_admin_commands(int socket, irc_message* msg) {
     if (strncmp(msg->params[1], quit, l_quit) == 0) {
         char* msg = "QUIT :I must obey\r\n";
         write(socket, msg, strlen(msg));
+    }
+}
+
+void parse_narratives(char* val) {
+    int looper = 0;
+    char *iter = strtok(val, ",");
+    while (iter != NULL) {
+        if (looper >= MAX_CHANNELS) {
+            break;
+        }
+        int len = strlen(iter);
+        strncpy(conf->narratives[looper], iter, CHANNEL_NAME_SIZE - 1);
+        conf->narratives[looper][len] = '\0';
+        // printf("Narrative: %s\n", conf->narratives[looper]);
+        looper++;
+        iter = strtok(NULL, ",");
     }
 }
