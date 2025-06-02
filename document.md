@@ -1,3 +1,23 @@
+# Requirements
+1. libcurl4-openssl-dev
+2. libjansson-dev
+3. ollama + gemma3:1b @ localhost:5000 (values are hard-coded, not configurable :P)
+4. Linux, I guess
+
+## Usage
+1. Bot will join the channels listed in the bot.cfg file (comma-separated). Channels, protected by passwords are not supported.
+2. Narrative keywords are used in bot's AI prompts to give better answers.
+3. Narratives are specified in the config file, comma-separated. Length of narratives list and channel list should be identical.
+4. In the list of narratives first channel gets first narrative, second channel - second. etc. E.g
+    channels=#Unix,#news
+    narratives=Operating systems,World politics
+
+    channel #Unix gets the "Operating systems" narrative, #news gets "World politics"
+5. Admin channel - password-protected channel that allows switching narratives for the channel and gracefully shutting dowon the bot.
+    For changing narrative: privmsg <#admin_channel> :switch <channel_to_switch> <new narrative> (mind, only singe space is supported between args)
+    To shutdown the bot gracefully (Bot will send QUIT msg to the server): privmsg <#admin_channel> :quit (Generally, string should start with 'quit')
+6. **Limitations**: bot doesn't really check if channel joinin is successful and does not support password-protected channels (except for admin channel). Bot doesn't track joins and parts, so it really never knows if it is alone in the channel. Bot can talk to channels only, no direct user messages. No notices, either.
+
 ## Steps
 1. Read RFC 1459, get into the server using nc, play with most commands manually.
 2. Learn fork, pipe and semaphores basics. Implement simple print-programs.
@@ -20,6 +40,11 @@
 ## Challenges
 1. C strings
 2. Main problem - message parsing. Especially if messages break in the middle because of buffer size.
-3. How to build architecture? 
-4. Children inherited the same socket and main was reading their input instead of listening to the network (fixed by only allowing main to network)
-5. Handling JSON from API is sheer pain.
+3. How to build architecture?
+4. Do I just ignore MOTD without parsing? (I did)
+5. Children inherited the same socket and main was reading their input instead of listening to the network (fixed by only allowing main to network)
+6. Handling JSON from API is sheer pain.
+7. I don't check for all the errors: is nick already taken? Did I join channel successfully?
+8. Also, temptation to hardcode buffre sizes, not define them
+9. Apparently, there is a bug were some command that should not be sent gets formed of leftovers of AI call.
+
