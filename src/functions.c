@@ -1,6 +1,6 @@
 #include "functions.h"
 
-void load_config(const char* filename, BotConfig* config) {
+void load_config(const char* filename) {
     FILE* f = fopen(filename, "r");
     if (!f) {
         perror("Could not open config file");
@@ -24,35 +24,35 @@ void load_config(const char* filename, BotConfig* config) {
         *equal_sign = '\0';
 
         if (strcmp(line_buff, "server") == 0) {
-            strncpy(config->server_ip, val, sizeof(config->server_ip)-1);
+            strncpy(conf->server_ip, val, sizeof(conf->server_ip)-1);
         } else if (strcmp(line_buff, "port") == 0) {
-            config->port = atoi(val);
+            conf->port = atoi(val);
         } else if (strcmp(line_buff, "nick") == 0) {
-            config->nick[0] = 'b';
-            strncpy(config->nick + 1, val, sizeof(config->nick)-1);
+            conf->nick[0] = 'b';
+            strncpy(conf->nick + 1, val, sizeof(conf->nick)-1);
         } else if (strcmp(line_buff, "user") == 0) {
-            strncpy(config->user, val, sizeof(config->user)-1);
+            strncpy(conf->user, val, sizeof(conf->user)-1);
         } else if (strcmp(line_buff, "realname") == 0) {
-            strncpy(config->realname, val, sizeof(config->realname)-1);
+            strncpy(conf->realname, val, sizeof(conf->realname)-1);
         } else if (strcmp(line_buff, "logfile") == 0) {
-            strncpy(config->logfile, val, sizeof(config->realname)-1);
+            strncpy(conf->logfile, val, sizeof(conf->realname)-1);
         } else if (strcmp(line_buff, "enable_logs") == 0) {
-            config->logs = atoi(val);
+            conf->logs = atoi(val);
         } else if (strcmp(line_buff, "admin_channel") == 0) {
-            strncpy(config->admin_channel, val, sizeof(config->admin_channel) - 1);
+            strncpy(conf->admin_channel, val, sizeof(conf->admin_channel) - 1);
         } else if (strcmp(line_buff, "admin_channel_pass") == 0) {
-            strncpy(config->admin_pass, val, sizeof(config->admin_pass) - 1);
+            strncpy(conf->admin_pass, val, sizeof(conf->admin_pass) - 1);
         } else if (strcmp(line_buff, "channels") == 0) {
-            config->chan_num = 0;
+            conf->chan_num = 0;
             char *iter = strtok(val, ",");
             while (iter != NULL) {
-                if (config->chan_num >= MAX_CHANNELS) {
+                if (conf->chan_num >= MAX_CHANNELS) {
                     break;
                 }
                 int len = strlen(iter);
-                strncpy(config->channels[config->chan_num], iter, CHANNEL_NAME_SIZE - 1);
-                config->channels[config->chan_num][len] = '\0';
-                config->chan_num++;
+                strncpy(conf->channels[conf->chan_num], iter, CHANNEL_NAME_SIZE - 1);
+                conf->channels[conf->chan_num][len] = '\0';
+                conf->chan_num++;
                 iter = strtok(NULL, ",");
             }
         }
@@ -105,14 +105,14 @@ int parse_message(char *message, irc_message* out) {
     }
 
     char log_buff[IRC_MSG_BUFF_SIZE];
-    write_log(conf.logfile, "---------\n");
+    write_log(conf->logfile, "---------\n");
     snprintf(log_buff, IRC_MSG_BUFF_SIZE, "%s|%s|%d\n", out->prefix, out->command, out->param_count);
-    write_log(conf.logfile, log_buff);
+    write_log(conf->logfile, log_buff);
     for (int i = 0; i < out->param_count; ++i) {
         snprintf(log_buff, IRC_MSG_BUFF_SIZE, "param[%d]:|%s\n", i, out->params[i]);
-        write_log(conf.logfile, log_buff);
+        write_log(conf->logfile, log_buff);
     }
-    write_log(conf.logfile, "---------\n");
+    write_log(conf->logfile, "---------\n");
     return 0;
 }
 
@@ -164,7 +164,7 @@ void listen_main(int socket) {
     regex_t regex;
     const char *pattern = "^b[A-Za-z]{4}[0-9]{4}$";
     if (regcomp(&regex, pattern, REG_EXTENDED) != 0) {
-        write_log(conf.logfile, "Could not compile regex!");
+        write_log(conf->logfile, "Could not compile regex!");
         regex_init = 0;
     }
 
@@ -174,7 +174,7 @@ void listen_main(int socket) {
             if (rec_buff[j] == '\n' && j > 0 && rec_buff[j-1] == '\r') { // message present
                 rec_buff[j-1] = '\0';
                 snprintf(log_buff, IRC_MSG_BUFF_SIZE * 2, "MESSAGE(%d): %s\n",  (int)strlen(tmp), tmp);
-                write_log(conf.logfile, log_buff);
+                write_log(conf->logfile, log_buff);
                 parse_message(tmp, &msg);
                 tmp = rec_buff+j+1;
 
@@ -184,14 +184,14 @@ void listen_main(int socket) {
                 } else if (strcmp(msg.command, "PRIVMSG") == 0) {
                     int channel_index, len;
                     char sender[200];
-                    if (strcmp(msg.params[0], conf.admin_channel) == 0) {
+                    if (strcmp(msg.params[0], conf->admin_channel) == 0) {
                         handle_admin_commands(socket, &msg);
                     } else if (
                         msg.param_count > 0 && 
                         regex_init &&
                         parse_user_from_prefix(msg.prefix, sender) == 0 &&
                         regexec(&regex, sender, 0, NULL, 0) != 0 &&    
-                        ( channel_index = find_channel_index(&conf, msg.params[0])) >= 0
+                        ( channel_index = find_channel_index(msg.params[0])) >= 0
                     ) {
                         write(main_to_children_pipes[channel_index][1], &msg, sizeof(irc_message));
                         read(children_to_main_pipes[channel_index][0], &len, sizeof(int));
@@ -209,16 +209,16 @@ void listen_child(int channel_no) {
     char resp[IRC_MSG_BUFF_SIZE];
     char sender[200];
     while ( read( main_to_children_pipes[channel_no][0], &message, sizeof(irc_message) ) > 0) {
-        write_log(conf.logfile, "MESSAGE RECEIVED!\n");
+        write_log(conf->logfile, "MESSAGE RECEIVED!\n");
         parse_user_from_prefix(message.prefix, sender);
-        int len = snprintf(resp, IRC_MSG_BUFF_SIZE, "PRIVMSG %s :Hi %s!!! My topic: %s\r\n", message.params[0], sender, conf.channels[channel_no]);
+        int len = snprintf(resp, IRC_MSG_BUFF_SIZE, "PRIVMSG %s :Hi %s!!! My topic: %s\r\n", message.params[0], sender, conf->channels[channel_no]);
         write(children_to_main_pipes[channel_no][1], &len, sizeof(int));
-        write_log(conf.logfile, resp);
+        write_log(conf->logfile, resp);
         write(children_to_main_pipes[channel_no][1], &resp, len);
     }
 }
 
-int server_reg(int socket, BotConfig *conf) { // send NICK and USER messages, expect MOTD
+int server_reg(int socket) { // send NICK and USER messages, expect MOTD
     char msg_reg[IRC_MSG_BUFF_SIZE];
     snprintf(msg_reg, IRC_MSG_BUFF_SIZE, "NICK %s\r\n", conf->nick);
   
@@ -233,9 +233,9 @@ int server_reg(int socket, BotConfig *conf) { // send NICK and USER messages, ex
 void join_channels(int sock) {
     char join_msg[IRC_MSG_BUFF_SIZE] = "JOIN ";
     int offset = strlen(join_msg);
-    for (int i = 0; i < conf.chan_num; ++i) {
+    for (int i = 0; i < conf->chan_num; ++i) {
         int written = snprintf(join_msg + offset, IRC_MSG_BUFF_SIZE - offset, "%s%s", 
-            conf.channels[i], i < conf.chan_num - 1 ? "," : "\r\n");
+            conf->channels[i], i < conf->chan_num - 1 ? "," : "\r\n");
         if (written < 0 || written >= IRC_MSG_BUFF_SIZE - offset) {
             fprintf(stderr, "Buffer overflow or error\n");
             cleanup_main();
@@ -243,10 +243,10 @@ void join_channels(int sock) {
         offset += written;
     }
     send(sock, join_msg, strlen(join_msg), 0);
-    write_log(conf.logfile, join_msg);
+    write_log(conf->logfile, join_msg);
 }
 
-int find_channel_index(BotConfig* conf,char* ch_name) {
+int find_channel_index(char* ch_name) {
     for (int ind = 0; ind < conf->chan_num; ++ind) {
         if (strcmp(conf->channels[ind], ch_name) == 0) {
             return ind;
@@ -256,8 +256,8 @@ int find_channel_index(BotConfig* conf,char* ch_name) {
 }
 
 void init_log(char* logfile) {
-    if (!conf.logs) return;
-    FILE *f = fopen(conf.logfile, "w");
+    if (!conf->logs) return;
+    FILE *f = fopen(conf->logfile, "w");
     if (f == NULL) {
         printf("Failed to owverwrite log file!\n");
         exit(1);
@@ -266,7 +266,7 @@ void init_log(char* logfile) {
 }
 
 int write_log(char* logfile,char* msg) {
-    if (!conf.logs) return 0;
+    if (!conf->logs) return 0;
 
     sem_wait(sync_logging_sem);
     FILE* f = fopen(logfile, "a");
@@ -305,11 +305,11 @@ int parse_user_from_prefix(char* prefix, char* out) {
 
 void join_admin(int socket) {
     char msg[IRC_MSG_BUFF_SIZE];
-    int l = snprintf(msg, IRC_MSG_BUFF_SIZE, "JOIN %s %s\r\n", conf.admin_channel, conf.admin_pass);
-    write_log(conf.logfile, msg);
+    int l = snprintf(msg, IRC_MSG_BUFF_SIZE, "JOIN %s %s\r\n", conf->admin_channel, conf->admin_pass);
+    write_log(conf->logfile, msg);
     write(socket, msg, l);
-    l = snprintf(msg, IRC_MSG_BUFF_SIZE, "MODE %s +k %s\r\n", conf.admin_channel, conf.admin_pass);
-    write_log(conf.logfile, msg);
+    l = snprintf(msg, IRC_MSG_BUFF_SIZE, "MODE %s +k %s\r\n", conf->admin_channel, conf->admin_pass);
+    write_log(conf->logfile, msg);
     write(socket, msg, l);
 }
 

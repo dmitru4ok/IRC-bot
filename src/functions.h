@@ -29,11 +29,10 @@ typedef struct {
     char admin_pass[20];
     char logfile[PATH_MAX];
     char channels[MAX_CHANNELS][CHANNEL_NAME_SIZE];
+    char narratives[MAX_CHANNELS][20];
     int chan_num;
     int port;
     int logs;
-
-
 } BotConfig;
 
 typedef struct {
@@ -46,21 +45,21 @@ typedef struct {
 extern int main_to_children_pipes[MAX_CHANNELS][2];
 extern int children_to_main_pipes[MAX_CHANNELS][2];
 extern pid_t child_pids[MAX_CHANNELS];
-extern BotConfig conf;
+extern BotConfig* conf;
 extern sem_t* sync_logging_sem;
 extern pid_t parent;
 
-void load_config(const char* filename, BotConfig* config);
+void load_config(const char* filename);
 int parse_message(char* message, irc_message* out);
 int ignore_big_msg(int sockfd);
-int connect_to_server(BotConfig* conf);
-int server_reg(int,BotConfig*);
+int connect_to_server();
+int server_reg(int);
 void listen_main(int);
 void listen_child(int);
 void join_channels(int);
 void join_admin(int);
 void cleanup_main();
-int find_channel_index(BotConfig*,char*);
+int find_channel_index(char*);
 int write_log(char*,char*);
 void init_log(char*);
 int parse_user_from_prefix(char*, char*);
