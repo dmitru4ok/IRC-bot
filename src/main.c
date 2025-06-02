@@ -9,7 +9,6 @@ sem_t* sync_logging_sem;
 pid_t parent;
 
 void cleanup_main() {
-    // only called by main, loop through child_pids to signal children to quit
     if (parent == getpid()) write_log(conf.logfile, "performing a cleanup\n");
 
     int pid_died;
@@ -98,6 +97,7 @@ int main() {
         while ( ignore_big_msg(clientfd) > 0); // janky, will work for now
         //join channels
         join_channels(clientfd);
+        join_admin(clientfd);
         // listen
         listen_main(clientfd);
        

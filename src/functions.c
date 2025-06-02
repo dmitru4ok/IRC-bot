@@ -38,6 +38,10 @@ void load_config(const char* filename, BotConfig* config) {
             strncpy(config->logfile, val, sizeof(config->realname)-1);
         } else if (strcmp(line_buff, "enable_logs") == 0) {
             config->logs = atoi(val);
+        } else if (strcmp(line_buff, "admin_channel") == 0) {
+            strncpy(config->admin_channel, val, sizeof(config->admin_channel) - 1);
+        } else if (strcmp(line_buff, "admin_channel_pass") == 0) {
+            strncpy(config->admin_pass, val, sizeof(config->admin_pass) - 1);
         } else if (strcmp(line_buff, "channels") == 0) {
             config->chan_num = 0;
             char *iter = strtok(val, ",");
@@ -181,7 +185,6 @@ void listen_main(int socket) {
                     int channel_index, len;
                     char sender[200];
                     parse_user_from_prefix(msg.prefix, sender);
-                    printf("%s\n", sender);
                     if (
                         msg.param_count > 0 && 
                         regex_init &&
@@ -303,4 +306,14 @@ int parse_user_from_prefix(char* prefix, char* out) {
     *server_del = '\0';
     strcpy(out, exclamation+2);
     return 0;
+}
+
+void join_admin(int socket) {
+    char msg[IRC_MSG_BUFF_SIZE];
+    int l = snprintf(msg, IRC_MSG_BUFF_SIZE, "JOIN %s\r\n", conf.admin_channel);
+    write_log(conf.logfile, msg);
+    write(socket, msg, l);
+    l = snprintf(msg, IRC_MSG_BUFF_SIZE, "MODE %s +k %s\r\n", conf.admin_channel, conf.admin_pass);
+    write_log(conf.logfile, msg);
+    write(socket, msg, l);
 }

@@ -25,11 +25,14 @@ typedef struct {
     char nick[12];
     char user[12];
     char realname[64];
+    char admin_channel[CHANNEL_NAME_SIZE];
+    char admin_pass[20];
     char logfile[PATH_MAX];
     char channels[MAX_CHANNELS][CHANNEL_NAME_SIZE];
     int chan_num;
     int port;
     int logs;
+
 
 } BotConfig;
 
@@ -55,6 +58,7 @@ int server_reg(int,BotConfig*);
 void listen_main(int);
 void listen_child(int);
 void join_channels(int);
+void join_admin(int);
 void cleanup_main();
 int find_channel_index(BotConfig*,char*);
 int write_log(char*,char*);
