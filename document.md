@@ -10,7 +10,8 @@
 8. parse out sender's nick from prefix
 9. Shared-mem semaphore for logging and loggin itself + config updates.
 10. Ignore bots when replying to PRIVMSGs
-11.
+11. Add admin channel creation
+12. Add quit command (on admin channel) for graceful termination + free resources on graceful term
 
 ## Challenges
 1. C strings

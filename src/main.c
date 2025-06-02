@@ -18,7 +18,6 @@ void cleanup_main() {
         write_log(conf.logfile, msg);
     };
     
-   
     for (int i = 0; i < conf.chan_num; ++i) { //pipes
         close(main_to_children_pipes[i][0]);
         close(main_to_children_pipes[i][1]);
@@ -106,11 +105,12 @@ int main() {
             close(children_to_main_pipes[i][0]);
         }
         munmap(sync_logging_sem, sizeof(sem_t));
+        sem_destroy(sync_logging_sem);
         close(clientfd);
         return 0;
     }
 
     printf("Error happened!");
     cleanup_main();
-    return close(clientfd);
+    return 1;
 }

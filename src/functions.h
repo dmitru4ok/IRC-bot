@@ -64,3 +64,4 @@ int find_channel_index(BotConfig*,char*);
 int write_log(char*,char*);
 void init_log(char*);
 int parse_user_from_prefix(char*, char*);
+void handle_admin_commands(int, irc_message*);

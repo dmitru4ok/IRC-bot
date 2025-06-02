@@ -184,10 +184,12 @@ void listen_main(int socket) {
                 } else if (strcmp(msg.command, "PRIVMSG") == 0) {
                     int channel_index, len;
                     char sender[200];
-                    parse_user_from_prefix(msg.prefix, sender);
-                    if (
+                    if (strcmp(msg.params[0], conf.admin_channel) == 0) {
+                        handle_admin_commands(socket, &msg);
+                    } else if (
                         msg.param_count > 0 && 
                         regex_init &&
+                        parse_user_from_prefix(msg.prefix, sender) == 0 &&
                         regexec(&regex, sender, 0, NULL, 0) != 0 &&    
                         ( channel_index = find_channel_index(&conf, msg.params[0])) >= 0
                     ) {
@@ -199,14 +201,7 @@ void listen_main(int socket) {
             }
         }
     }
-   
-
-    // close pipe writing channels
-    for (int i = 0; i < conf.chan_num; ++i) {
-        close(main_to_children_pipes[i][1]);
-    }
-    sem_destroy(sync_logging_sem);
-    munmap(sync_logging_sem, sizeof(sem_t));
+    regfree(&regex);
 }
 
 void listen_child(int channel_no) {
@@ -310,10 +305,19 @@ int parse_user_from_prefix(char* prefix, char* out) {
 
 void join_admin(int socket) {
     char msg[IRC_MSG_BUFF_SIZE];
-    int l = snprintf(msg, IRC_MSG_BUFF_SIZE, "JOIN %s\r\n", conf.admin_channel);
+    int l = snprintf(msg, IRC_MSG_BUFF_SIZE, "JOIN %s %s\r\n", conf.admin_channel, conf.admin_pass);
     write_log(conf.logfile, msg);
     write(socket, msg, l);
     l = snprintf(msg, IRC_MSG_BUFF_SIZE, "MODE %s +k %s\r\n", conf.admin_channel, conf.admin_pass);
     write_log(conf.logfile, msg);
     write(socket, msg, l);
+}
+
+void handle_admin_commands(int socket, irc_message* msg) {
+    char* quit = "quit";
+    int l_quit = strlen(quit);
+    if (strncmp(msg->params[1], quit, l_quit) == 0) {
+        char* msg = "QUIT :I must obey\r\n";
+        write(socket, msg, strlen(msg));
+    }
 }
