@@ -197,7 +197,8 @@ void listen_main(int socket) {
                     ) {
                         write(main_to_children_pipes[channel_index][1], &msg, sizeof(irc_message));
                         read(children_to_main_pipes[channel_index][0], &len, sizeof(int));
-                        read(children_to_main_pipes[channel_index][0], &resp_buff, len);
+                        read(children_to_main_pipes[channel_index][0], resp_buff, len);
+                        write(socket, resp_buff, len);
                     }
                 }
             }
@@ -213,7 +214,7 @@ void listen_child(int channel_no) {
     while ( read( main_to_children_pipes[channel_no][0], &message, sizeof(irc_message) ) > 0) {
         write_log(conf->logfile, "MESSAGE RECEIVED!\n");
         parse_user_from_prefix(message.prefix, sender);
-        int len = snprintf(resp, IRC_MSG_BUFF_SIZE, "PRIVMSG %s :Hi %s!!! My topic: %s\r\n", message.params[0], sender, conf->channels[channel_no]);
+        int len = snprintf(resp, IRC_MSG_BUFF_SIZE, "PRIVMSG %s :Hi, %s!!! My topic on this chanel: %s\r\n", message.params[0], sender, conf->narratives[channel_no]);
         write(children_to_main_pipes[channel_no][1], &len, sizeof(int));
         write_log(conf->logfile, resp);
         write(children_to_main_pipes[channel_no][1], &resp, len);

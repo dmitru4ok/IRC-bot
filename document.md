@@ -14,7 +14,8 @@
 12. Add quit command (on admin channel) for graceful termination + free resources on graceful term
 13. Move config variable to shared memory, add narratives array to config, narrative parsing.
 14. Narrative change via admin command
-15.
+15. Make main respond to privmsg, not only log the answer
+16. 
 
 ## Challenges
 1. C strings
