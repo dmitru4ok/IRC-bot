@@ -15,11 +15,11 @@
 13. Move config variable to shared memory, add narratives array to config, narrative parsing.
 14. Narrative change via admin command
 15. Make main respond to privmsg, not only log the answer
-16. 
+16. integrate with AI: add curl and jannson libs, link in Makefile too
 
 ## Challenges
 1. C strings
 2. Main problem - message parsing. Especially if messages break in the middle because of buffer size.
 3. How to build architecture? 
 4. Children inherited the same socket and main was reading their input instead of listening to the network (fixed by only allowing main to network)
-5. 
+5. Handling JSON from API is sheer pain.

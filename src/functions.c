@@ -209,12 +209,15 @@ void listen_main(int socket) {
 
 void listen_child(int channel_no) {
     irc_message message;
-    char resp[IRC_MSG_BUFF_SIZE];
+    char resp[IRC_MSG_BUFF_SIZE], model_resp[IRC_MSG_BUFF_SIZE];
     char sender[200];
     while ( read( main_to_children_pipes[channel_no][0], &message, sizeof(irc_message) ) > 0) {
         write_log(conf->logfile, "MESSAGE RECEIVED!\n");
         parse_user_from_prefix(message.prefix, sender);
-        int len = snprintf(resp, IRC_MSG_BUFF_SIZE, "PRIVMSG %s :Hi, %s!!! PROMPT: Answer if question: %s OR Talk about %s. No more than 20 words!\r\n", message.params[0], sender, message.params[1], conf->narratives[channel_no]);
+        char prompt[300];
+        snprintf(prompt, sizeof(prompt), "Answer if question: %s OR Talk about %s. No more than 20 words!",  message.params[1], conf->narratives[channel_no]);
+        get_model_response(prompt, model_resp);
+        int len = snprintf(resp, IRC_MSG_BUFF_SIZE, "PRIVMSG %s :%s\r\n", message.params[0], model_resp);
         write(children_to_main_pipes[channel_no][1], &len, sizeof(int));
         write_log(conf->logfile, resp);
         write(children_to_main_pipes[channel_no][1], &resp, len);
@@ -360,4 +363,79 @@ void parse_narratives(char* val) {
         looper++;
         iter = strtok(NULL, ",");
     }
+}
+
+size_t write_callback(void *contents, size_t size, size_t nmemb, void *userp) {
+    size_t realsize = size * nmemb;
+    char *data = (char *)userp;
+    strcat(data, (char *)contents);
+    return realsize;
+}
+
+void get_model_response(char* prompt, char* out) {
+    CURL *curl;
+    CURLcode res;
+    char api_url[] = "http://127.0.0.1:5000/api/generate";
+    char response_string[4096] = {0};
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    curl = curl_easy_init();
+    if (curl) {
+        json_t *root = json_object();
+        json_object_set_new(root, "prompt", json_string(prompt));
+        json_object_set_new(root, "model", json_string("gemma3:1b"));
+        json_object_set_new(root, "stream", json_false());
+        json_t *options = json_object();
+        json_object_set_new(options, "num_predict", json_integer(35));
+        json_object_set_new(options, "temperature", json_real(1.0));
+        json_object_set_new(root, "options", options);
+
+        char *json_body = json_dumps(root, JSON_COMPACT);
+        if (!json_body) {
+            write_log(conf->logfile, "Error: Failed to dump JSON.\n");
+            json_decref(root);
+            curl_easy_cleanup(curl);
+            curl_global_cleanup();
+            return;
+        }
+
+        curl_easy_setopt(curl, CURLOPT_URL, api_url);
+        curl_easy_setopt(curl, CURLOPT_POST, 1L);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_body);
+        struct curl_slist *headers = NULL;
+        headers = curl_slist_append(headers, "Content-Type: application/json");
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+        // callback function
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, response_string);
+        write_log(conf->logfile, "Awaiting for gemma3 response!\n");
+        res = curl_easy_perform(curl);
+
+        if (res != CURLE_OK) {
+            write_log(conf->logfile, "curl_easy_perform failed with not OK status\n");
+        } else {
+            json_error_t error;
+            json_t *json_response = json_loads(response_string, 0, &error);
+            if (json_response) {
+                const char *reply = json_string_value(json_object_get(json_response, "response"));
+                if (reply) {
+                    strncpy(out, reply, IRC_MSG_BUFF_SIZE);
+                    write_log(conf->logfile, "Generated text succesfully!\n");
+                }
+                json_decref(json_response);
+            } else {
+                write_log(conf->logfile, "Error decoding JSON response\n");
+            }
+        }
+
+        free(json_body);
+        json_decref(root);
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
+    } else {
+        write_log(conf->logfile, "Error: Failed to initialize libcurl!\n");
+    }
+
+    curl_global_cleanup();
 }

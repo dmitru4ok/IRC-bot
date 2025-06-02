@@ -5,7 +5,7 @@ all: bot
 
 bot: $(TARGET_FILES)
 	mkdir -p $(OUT_DIR)
-	gcc -Wall -O3 -g $(TARGET_FILES) -o $(OUT_DIR)/bot
+	gcc -Wall -O3 -g $(TARGET_FILES) -o $(OUT_DIR)/bot -lcurl -ljansson
 
 clean:
 	rm -f $(OUT_DIR)/bot

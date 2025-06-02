@@ -15,6 +15,7 @@
 #include <time.h>
 #include <regex.h>
 #include <curl/curl.h>
+#include <jansson.h>
 
 #define IRC_MSG_BUFF_SIZE 513 // 512 for protocol + 1 for \0
 #define MAX_PARAMS 15
@@ -66,3 +67,4 @@ void init_log(char*);
 int parse_user_from_prefix(char*, char*);
 void handle_admin_commands(int, irc_message*);
 void parse_narratives(char*);
+void get_model_response(char* prompt, char* res);
