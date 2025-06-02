@@ -317,10 +317,31 @@ void join_admin(int socket) {
 
 void handle_admin_commands(int socket, irc_message* msg) {
     char* quit = "quit";
-    int l_quit = strlen(quit);
-    if (strncmp(msg->params[1], quit, l_quit) == 0) {
+    char* switch_ = "switch";
+    if (strncmp(msg->params[1], quit,  strlen(quit)) == 0) {
         char* msg = "QUIT :I must obey\r\n";
         write(socket, msg, strlen(msg));
+    } else if (strncmp(msg->params[1], switch_, strlen(switch_)) == 0) {
+        // switch <channel> <new narrative text>
+        char copy[300], channel[CHANNEL_NAME_SIZE], new_narrative[30];
+        strncpy(copy, msg->params[1], 300);
+        char* space = strchr(copy, ' ');
+        space++;
+        char* iter = space;
+        space = strchr(iter, ' ');   
+        *space = '\0';
+        strncpy(channel, iter, sizeof(channel));
+        space++;
+        iter = space;
+        int i = 0;
+        for (; i < conf->chan_num; ++i) {
+            if (strcmp(channel, conf->channels[i]) == 0) {
+                strncpy( conf->narratives[i], iter, sizeof(new_narrative));
+                break;
+            }
+        }
+
+        printf("change of narrative: %s -> %s\n", conf->channels[i], conf->narratives[i]);
     }
 }
 
